@@ -1,5 +1,6 @@
+use bitvec::vec::BitVec;
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
+use std::{cmp::Ordering, collections::HashMap};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct HuffmanNode {
@@ -67,6 +68,37 @@ impl<T: Clone + Eq> Ord for Tree<T> {
 impl<T: Clone + Eq> PartialOrd for Tree<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl<T: Eq + Clone + std::hash::Hash> Tree<T> {
+    pub fn create_encode_table(&self) -> HashMap<T, BitVec> {
+        let mut encode_table = HashMap::new();
+
+        let mut stack = vec![(self, BitVec::new())];
+        while !stack.is_empty() {
+            let (node, code) = stack.pop().unwrap();
+            match node {
+                Tree::Leaf { token, .. } => {
+                    encode_table.insert(token.clone(), code.clone());
+                }
+                Tree::Node {
+                    left_node,
+                    right_node,
+                    ..
+                } => {
+                    let mut left_path = code.clone();
+                    left_path.push(false);
+                    stack.push((left_node, left_path));
+
+                    let mut right_path = code.clone();
+                    right_path.push(true);
+                    stack.push((right_node, right_path));
+                }
+            }
+        }
+
+        encode_table
     }
 }
 

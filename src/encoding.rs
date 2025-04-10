@@ -36,37 +36,46 @@ pub fn huffman_tree<T: Eq + Clone>(input_with_freqs: &HashMap<T, u64>) -> Tree<T
     heap.pop().unwrap().0
 }
 
-pub fn freqs_chars(encoding_chaff: &String) -> HashMap<char, u64> {
-    encoding_chaff
-        .chars()
-        .into_iter()
-        .fold(HashMap::new(), |mut acc: HashMap<_, _>, ch: char| {
-            *acc.entry(ch).or_insert(0) += 1;
-            acc
-        })
-}
-
-// fn numbers_to_tree<T>(tree: &Tree<T>) -> HashMap<T,
-
-// fn create_prepend_table(table: &HuffmanNode) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-//     let serialized = serde_json::to_vec(&table)?;
-//     Ok(serialized)
-// }
-
-fn compress_to_struct<T: Eq + std::hash::Hash>(tree: &Tree<T>) -> CompressedData<T> {
-    let encoder = HashMap::new();
-}
-
-pub fn encode_huffman_solo<'a, T, TokenExtractor, TokensIter>(
-    text: &String,
-    extract_tokens: TokenExtractor,
-) -> CompressedData<char>
+fn encoder_to_decoder<K, V>(map: &HashMap<K, V>) -> HashMap<V, K>
 where
-    TokenExtractor: Fn(&'a str) -> TokensIter,
-    TokensIter: Iterator<Item = T>,
+    V: std::hash::Hash + Clone + Eq,
+    K: std::hash::Hash + Clone + Eq,
 {
-    let freqs = freqs_chars(&text);
+    map.iter().map(|(k, v)| (v.clone(), k.clone())).collect()
+}
+
+pub fn encode_huffman_solo<
+    'a,
+    T: std::fmt::Debug + Clone + Eq + std::hash::Hash + Serialize,
+    TokenExtractor,
+    FreqF,
+    TokensIter,
+>(
+    text: &'a String,
+    extract_tokens: TokenExtractor,
+    freq_finder: FreqF,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>>
+where
+    TokenExtractor: Fn(&'a String) -> TokensIter,
+    TokensIter: Iterator<Item = T>,
+    FreqF: Fn(&String) -> HashMap<T, u64>,
+{
+    let freqs = freq_finder(text);
     let working_tree = huffman_tree(&freqs);
+
+    let encoder = working_tree.create_encode_table();
+
+    let data: Vec<BitVec> = extract_tokens(text)
+        .map(|token| encoder.get(&token).unwrap().clone())
+        .collect();
+    rmp_serde::to_vec(&CompressedData { encoder, data }).map_err(|x| x.into())
+}
+
+pub fn decode_huffman_solo<'a, T: Eq + Clone + std::hash::Hash + Deserialize<'a>>(
+    text: &'a Vec<u8>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let strct: CompressedData<T> = rmp_serde::from_slice(text)?;
+    let decode_tree = encoder_to_decoder(&strct.encoder);
 }
 
 #[cfg(test)]

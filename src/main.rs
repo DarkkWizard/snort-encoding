@@ -1,7 +1,11 @@
-use encoding::{encode_huffman_solo, freqs_chars, huffman_tree};
-mod encoding;
 use clap::Parser;
-use std::path::PathBuf;
+use encoding::{decode_huffman_solo, encode_huffman_solo};
+use std::{
+    collections::HashMap,
+    io::{BufWriter, Write},
+    path::PathBuf,
+};
+mod encoding;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -30,21 +34,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match args.action {
         Action::Encode => match args.mode {
-            Mode::HuffmanCounts => {
-                todo!();
-            }
             Mode::HuffmanSolo => {
                 let text = std::fs::read_to_string(args.input)?;
                 let dest = args.output.clone();
                 eprintln!("found and read file");
 
-                let compressed_datums = encode_huffman_solo(&text, |text| text.chars());
-                eprintln!("compressed the given data into {:?}", &args.output);
+                let compressed_datums = encode_huffman_solo(
+                    &text,
+                    |x| x.chars(),
+                    |y| {
+                        y.chars().into_iter().fold(
+                            HashMap::new(),
+                            |mut acc: HashMap<_, _>, ch: char| {
+                                *acc.entry(ch).or_insert(0) += 1;
+                                acc
+                            },
+                        )
+                    },
+                )?;
+                eprintln!("compressed the given data");
+
+                let file = std::fs::File::create(&dest)?;
+                let mut bw = BufWriter::new(&file);
+                let _ = bw.write(&compressed_datums);
+                eprintln!("writen compressed data to {:?}", &args.output);
+            }
+            Mode::HuffmanCounts => {
+                todo!();
             }
         },
-        Action::Decode => {
-            todo!();
-        }
+        Action::Decode => match args.mode {
+            Mode::HuffmanSolo => {
+                let raw_data = std::fs::read(args.input)?;
+                let uncompressed_data = decode_huffman_solo::<char>(&raw_data)?;
+                dbg!(uncompressed_data);
+            }
+            Mode::HuffmanCounts => {
+                todo!();
+            }
+        },
     }
 
     Ok(())
