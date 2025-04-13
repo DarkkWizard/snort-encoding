@@ -8,6 +8,7 @@ use std::collections::{BinaryHeap, HashMap};
 pub struct CompressedData<T: Eq + std::hash::Hash> {
     encoder: HashMap<T, BitVec>,
     data: Vec<BitVec>,
+    encode_type: crate::Mode,
 }
 
 pub fn huffman_tree<T: Eq + Clone>(input_with_freqs: &HashMap<T, u64>) -> Tree<T> {
@@ -50,17 +51,22 @@ pub fn encode_huffman_solo<
     TokenExtractor,
     FreqF,
     TokensIter,
+    String: FromIterator<T> + std::fmt::Debug,
 >(
     text: &'a String,
     extract_tokens: TokenExtractor,
     freq_finder: FreqF,
+    mode: crate::Mode,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>>
 where
     TokenExtractor: Fn(&'a String) -> TokensIter,
     TokensIter: Iterator<Item = T>,
-    FreqF: Fn(&String) -> HashMap<T, u64>,
+    FreqF: Fn(&Vec<String>) -> HashMap<T, u64>,
+    Vec<String>: FromIterator<T>,
 {
-    let freqs = freq_finder(text);
+    let w: Vec<String> = extract_tokens(text).collect();
+    let freqs = freq_finder(&w);
+
     let working_tree = huffman_tree(&freqs);
 
     let encoder = working_tree.create_encode_table();
@@ -68,14 +74,37 @@ where
     let data: Vec<BitVec> = extract_tokens(text)
         .map(|token| encoder.get(&token).unwrap().clone())
         .collect();
-    rmp_serde::to_vec(&CompressedData { encoder, data }).map_err(|x| x.into())
+    rmp_serde::to_vec(&CompressedData {
+        encoder,
+        data,
+        encode_type: mode,
+    })
+    .map_err(|x| x.into())
 }
 
-pub fn decode_huffman_solo<'a, T: Eq + Clone + std::hash::Hash + Deserialize<'a>>(
+pub fn decode_huffman_solo<
+    'a,
+    T: Eq + Clone + std::hash::Hash + std::fmt::Display + Deserialize<'a>,
+>(
     text: &'a Vec<u8>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let strct: CompressedData<T> = rmp_serde::from_slice(text)?;
     let decode_tree = encoder_to_decoder(&strct.encoder);
+
+    let data_remaining: Result<String, Box<dyn std::error::Error>> =
+        strct.data.iter().fold(Ok(String::new()), |acc, val| {
+            let mut acc_new = acc?;
+            match decode_tree.get(val) {
+                Some(decoded_value) => {
+                    acc_new.push_str(&decoded_value.to_string());
+                    Ok(acc_new)
+                }
+                None => Err("Invalid data, could not be decoded".into()),
+            }
+        });
+
+    let result = data_remaining?;
+    Ok(result)
 }
 
 #[cfg(test)]
