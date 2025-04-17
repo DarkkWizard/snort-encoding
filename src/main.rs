@@ -24,10 +24,11 @@ enum Action {
     Decode,
 }
 
-#[derive(clap::ValueEnum, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(clap::ValueEnum, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Default)]
 enum Mode {
-    HuffmanSolo,
+    HuffmanChars,
     HuffmanCounts,
+    #[default]
     HuffmanChunks,
 }
 
@@ -41,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("found and read file");
 
             let compressed_datums = match args.mode {
-                Mode::HuffmanSolo => {
+                Mode::HuffmanChars => {
                     encode_huffman_solo(
                         // this is so dumb but I want it for the extra functionality in the other
                         // length inputs.
@@ -56,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 },
                             )
                         },
-                        Mode::HuffmanSolo,
+                        Mode::HuffmanChars,
                     )?
                 }
                 Mode::HuffmanChunks => encode_huffman_solo(
@@ -97,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("Read the input data");
 
             let uncompressed_data = match args.mode {
-                Mode::HuffmanSolo => decode_huffman_solo::<char>(&raw_data)?,
+                Mode::HuffmanChars => decode_huffman_solo::<char>(&raw_data)?,
                 Mode::HuffmanCounts => decode_huffman_solo::<String>(&raw_data)?,
                 Mode::HuffmanChunks => todo!(),
             };

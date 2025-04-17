@@ -4,7 +4,7 @@ use snort::{Tree, Tree::Leaf, Tree::Node};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct CompressedData<T: Eq + std::hash::Hash> {
     encoder: HashMap<T, BitVec>,
     data: Vec<BitVec>,
@@ -74,12 +74,19 @@ where
     let data: Vec<BitVec> = extract_tokens(text)
         .map(|token| encoder.get(&token).unwrap().clone())
         .collect();
-    rmp_serde::to_vec(&CompressedData {
+
+    let mut datums = Vec::new();
+    let mut serializer =
+        rmp_serde::Serializer::new(&mut datums).with_bytes(rmp_serde::config::BytesMode::ForceAll);
+
+    CompressedData {
         encoder,
         data,
         encode_type: mode,
-    })
-    .map_err(|x| x.into())
+    }
+    .serialize(&mut serializer)?;
+
+    Ok(datums)
 }
 
 pub fn decode_huffman_solo<
