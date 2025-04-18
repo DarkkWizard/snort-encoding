@@ -7,7 +7,7 @@ use std::collections::{BinaryHeap, HashMap};
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct CompressedData<T: Eq + std::hash::Hash> {
     encoder: HashMap<T, BitVec>,
-    data: Vec<BitVec>,
+    data: BitVec,
     encode_type: crate::Mode,
 }
 
@@ -45,7 +45,7 @@ where
     map.iter().map(|(k, v)| (v.clone(), k.clone())).collect()
 }
 
-pub fn encode_huffman_solo<
+pub fn encode_huffman<
     'a,
     T: std::fmt::Debug + Clone + Eq + std::hash::Hash + Serialize,
     TokenExtractor,
@@ -54,7 +54,7 @@ pub fn encode_huffman_solo<
     String: FromIterator<T> + std::fmt::Debug,
 >(
     text: &'a String,
-    extract_tokens: TokenExtractor,
+    extract_tokens_iter: TokenExtractor,
     freq_finder: FreqF,
     mode: crate::Mode,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>>
@@ -64,16 +64,19 @@ where
     FreqF: Fn(&Vec<String>) -> HashMap<T, u64>,
     Vec<String>: FromIterator<T>,
 {
-    let w: Vec<String> = extract_tokens(text).collect();
+    let w: Vec<String> = extract_tokens_iter(text).collect();
     let freqs = freq_finder(&w);
 
     let working_tree = huffman_tree(&freqs);
 
     let encoder = working_tree.create_encode_table();
 
-    let data: Vec<BitVec> = extract_tokens(text)
+    let data: BitVec = extract_tokens_iter(text)
         .map(|token| encoder.get(&token).unwrap().clone())
-        .collect();
+        .fold(BitVec::new(), |mut acc, x| {
+            acc.extend_from_bitslice(&x);
+            acc
+        });
 
     let mut datums = Vec::new();
     let mut serializer =
@@ -89,26 +92,27 @@ where
     Ok(datums)
 }
 
-pub fn decode_huffman_solo<
-    'a,
-    T: Eq + Clone + std::hash::Hash + std::fmt::Display + Deserialize<'a>,
->(
-    text: &'a Vec<u8>,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let strct: CompressedData<T> = rmp_serde::from_slice(text)?;
-    let decode_tree = encoder_to_decoder(&strct.encoder);
+pub fn decode_huffman(text: &Vec<u8>) -> Result<String, Box<dyn std::error::Error>> {
+    let strct: CompressedData<String> = rmp_serde::from_slice(text)?;
+    let decoder = encoder_to_decoder(&strct.encoder);
 
-    let data_remaining: Result<String, Box<dyn std::error::Error>> =
-        strct.data.iter().fold(Ok(String::new()), |acc, val| {
-            let mut acc_new = acc?;
-            match decode_tree.get(val) {
-                Some(decoded_value) => {
-                    acc_new.push_str(&decoded_value.to_string());
-                    Ok(acc_new)
+    let data_remaining: Result<String, Box<dyn std::error::Error>> = {
+        let mut tokens: Vec<String> = vec![];
+        let mut canditate = BitVec::new();
+
+        for bit in strct.data {
+            canditate.push(bit);
+
+            match decoder.get(&canditate) {
+                Some(success) => {
+                    tokens.push(success.clone().to_string());
+                    canditate = BitVec::new();
                 }
-                None => Err("Invalid data, could not be decoded".into()),
+                None => (),
             }
-        });
+        }
+        Ok(tokens.iter().map(|c| c.to_string()).collect())
+    };
 
     let result = data_remaining?;
     Ok(result)
@@ -117,4 +121,73 @@ pub fn decode_huffman_solo<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Mode;
+
+    #[test]
+    fn encode_decode() {
+        let encodable = "other greater pleasures, or else he endures pains to avoid worse
+                        pains.But I must explain to you how all this mistaken idea of denouncing
+                        pleasure and praising pain was born and I will give you a complete
+                        account of the system, and expound the actual teachings of the great
+                        explorer of the truth, the master-builder of human happiness. No one
+                        rejects, dislikes, or avoids pleasure itself, because it is pleasure,
+                        but because those who do not know how to pursue pleasure rationally
+                        encounter consequences that are extremely painful. Nor again is there
+                        anyone who loves or pursues or desires to obtain pain of itself, because
+                        it is pain, but because occasionally circumstances occur in which toil
+                        and pain can procure him some great pleasure. To take a trivial example,
+                        which of us ever undertakes laborious physical exercise, except to
+                        obtain some advantage from it? But who has any right to find fault with
+                        a man who chooses to enjoy a pleasure that has no annoying consequences,
+                        or one who avoids a pain"
+            .to_string();
+        let encoded = encode_huffman(
+            &encodable,
+            |x| x.chars().map(|g| g.to_string()),
+            |y| {
+                y.into_iter()
+                    .fold(HashMap::new(), |mut acc: HashMap<_, _>, ch: &String| {
+                        *acc.entry(ch.to_string()).or_insert(0) += 1;
+                        acc
+                    })
+            },
+            Mode::HuffmanChars,
+        )
+        .unwrap();
+
+        let decoded = decode_huffman(&encoded).unwrap();
+
+        assert_eq!(&encodable, &decoded);
+    }
+
+    #[test]
+    fn tree() {
+        let mut freqs = HashMap::new();
+        freqs.insert("hey".to_string(), 45);
+        freqs.insert("sup".to_string(), 30);
+        freqs.insert("kool".to_string(), 15);
+        freqs.insert("rad".to_string(), 10);
+
+        let tree = huffman_tree(&freqs);
+
+        assert_eq!(tree.freq(), 100);
+
+        // most frequent token should be the shortest
+        assert_eq!(tree.left().and_then(|l| Some(l.freq())), Some(45));
+        assert_eq!(tree.left().and_then(|l| l.token()), Some("hey".to_string()));
+
+        // second most should have the second shortest
+        assert_eq!(
+            tree.right().and_then(|l| l.right()).and_then(|r| r.token()),
+            Some("sup".to_string())
+        );
+        assert_eq!(
+            tree.right()
+                .and_then(|l| l.right())
+                .and_then(|r| Some(r.freq())),
+            Some(30)
+        );
+
+        // I don't want to write the more testing
+    }
 }

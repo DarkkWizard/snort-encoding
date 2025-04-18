@@ -3,41 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, collections::HashMap};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct HuffmanNode {
-    pub left_node: Option<Box<HuffmanNode>>,
-    pub right_node: Option<Box<HuffmanNode>>,
-    /// The number of times that the letter is used in the data given
-    pub freq: usize,
-    /// The letter that we are encoding
-    pub value: Option<char>,
-}
-
-impl HuffmanNode {
-    /// Creates a new HuffmanNode from data that we give it. Use this for leaf nodes
-    /// as if we want an inner node then we would need to pass in other HuffmanNodes
-    /// to work with.
-    pub fn new_alone(value: char, freq: usize) -> Self {
-        Self {
-            left_node: None,
-            right_node: None,
-            freq,
-            value: Some(value),
-        }
-    }
-
-    /// Creates a new HuffmanNode from two already existing nodes. Used for creating
-    /// the tree that we use to encode.
-    pub fn new_from_two(left_node: HuffmanNode, right_node: HuffmanNode) -> Self {
-        Self {
-            freq: left_node.freq + right_node.freq,
-            left_node: Some(Box::new(left_node.clone())),
-            right_node: Some(Box::new(right_node.clone())),
-            value: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Tree<T> {
     Leaf {
         freq: u64,
@@ -50,11 +15,35 @@ pub enum Tree<T> {
     },
 }
 
-impl<T> Tree<T> {
+impl<T> Tree<T>
+where
+    T: Clone,
+{
     pub fn freq(&self) -> u64 {
         match self {
             Tree::Leaf { freq, .. } => *freq,
             Tree::Node { freq, .. } => *freq,
+        }
+    }
+
+    pub fn left(&self) -> Option<&Tree<T>> {
+        match self {
+            Tree::Leaf { .. } => None,
+            Tree::Node { left_node, .. } => Some(left_node),
+        }
+    }
+
+    pub fn right(&self) -> Option<&Tree<T>> {
+        match self {
+            Tree::Leaf { .. } => None,
+            Tree::Node { right_node, .. } => Some(right_node),
+        }
+    }
+
+    pub fn token(&self) -> Option<T> {
+        match self {
+            Tree::Leaf { token, .. } => Some(token.clone()),
+            Tree::Node { .. } => None,
         }
     }
 }
@@ -161,4 +150,9 @@ fn print_node_value<T: std::fmt::Debug>(tree: &Tree<T>) {
         Tree::Leaf { token, .. } => println!("{:?}", token),
         Tree::Node { .. } => println!("*"),
     }
+}
+
+#[cfg(test)]
+mod tests {
+    // use super::*;
 }

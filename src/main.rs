@@ -37,29 +37,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match args.action {
         Action::Encode => {
+            let file = std::fs::File::open(&args.input)?;
             let text = std::fs::read_to_string(args.input)?;
             let dest = args.output.clone();
-            eprintln!("found and read file");
+            eprintln!("found and read file. Size is: {:?}", file.metadata()?.len());
 
             let compressed_datums = match args.mode {
-                Mode::HuffmanChars => {
-                    encode_huffman_solo(
-                        // this is so dumb but I want it for the extra functionality in the other
-                        // length inputs.
-                        &text,
-                        |x| x.chars().map(|g| g.to_string()),
-                        |y| {
-                            y[0].chars().into_iter().fold(
-                                HashMap::new(),
-                                |mut acc: HashMap<_, _>, ch: char| {
-                                    *acc.entry(ch.to_string()).or_insert(0) += 1;
-                                    acc
-                                },
-                            )
-                        },
-                        Mode::HuffmanChars,
-                    )?
-                }
+                Mode::HuffmanChars => encode_huffman_solo(
+                    &text,
+                    |x| x.chars().map(|g| g.to_string()),
+                    |y| {
+                        y.into_iter()
+                            .fold(HashMap::new(), |mut acc: HashMap<_, _>, ch: &String| {
+                                *acc.entry(ch.to_string()).or_insert(0) += 1;
+                                acc
+                            })
+                    },
+                    Mode::HuffmanChars,
+                )?,
+
                 Mode::HuffmanChunks => encode_huffman_solo(
                     &text,
                     |x| {
@@ -90,18 +86,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let file = std::fs::File::create(&dest)?;
             let mut bw = BufWriter::new(&file);
             let _ = bw.write(&compressed_datums);
-            eprintln!("writen compressed data to {:?}", &args.output);
+            let file_len = file.metadata()?.len();
+            eprintln!(
+                "writen compressed data to {:?}. New file size is {}",
+                &args.output, file_len
+            );
         }
         Action::Decode => {
             let dest = args.output.clone();
             let raw_data = std::fs::read(args.input)?;
             eprintln!("Read the input data");
 
-            let uncompressed_data = match args.mode {
-                Mode::HuffmanChars => decode_huffman_solo::<char>(&raw_data)?,
-                Mode::HuffmanCounts => decode_huffman_solo::<String>(&raw_data)?,
-                Mode::HuffmanChunks => todo!(),
-            };
+            let uncompressed_data = decode_huffman_solo(&raw_data)?;
             eprintln!("Decopmressed data in __ time");
 
             let file = std::fs::File::create(&dest)?;
