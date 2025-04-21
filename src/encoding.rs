@@ -53,13 +53,13 @@ pub fn encode_huffman<
     TokensIter,
     String: FromIterator<T> + std::fmt::Debug,
 >(
-    text: &'a String,
+    text: &'a str,
     extract_tokens_iter: TokenExtractor,
     freq_finder: FreqF,
     mode: crate::Mode,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>>
 where
-    TokenExtractor: Fn(&'a String) -> TokensIter,
+    TokenExtractor: Fn(&'a str) -> TokensIter,
     TokensIter: Iterator<Item = T>,
     FreqF: Fn(&Vec<String>) -> HashMap<T, u64>,
     Vec<String>: FromIterator<T>,

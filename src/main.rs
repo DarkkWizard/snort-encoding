@@ -1,5 +1,5 @@
 use clap::Parser;
-use encoding::{decode_huffman_solo, encode_huffman_solo};
+use encoding::{decode_huffman, encode_huffman};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("found and read file. Size is: {:?}", file.metadata()?.len());
 
             let compressed_datums = match args.mode {
-                Mode::HuffmanChars => encode_huffman_solo(
+                Mode::HuffmanChars => encode_huffman(
                     &text,
                     |x| x.chars().map(|g| g.to_string()),
                     |y| {
@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Mode::HuffmanChars,
                 )?,
 
-                Mode::HuffmanChunks => encode_huffman_solo(
+                Mode::HuffmanChunks => encode_huffman(
                     &text,
                     |x| {
                         let mut chars = x.chars();
@@ -97,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let raw_data = std::fs::read(args.input)?;
             eprintln!("Read the input data");
 
-            let uncompressed_data = decode_huffman_solo(&raw_data)?;
+            let uncompressed_data = decode_huffman(&raw_data)?;
             eprintln!("Decopmressed data in __ time");
 
             let file = std::fs::File::create(&dest)?;
